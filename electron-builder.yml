@@ -1,0 +1,61 @@
+appId: com.takeover.app
+productName: Takeover
+copyright: Copyright © 2024
+
+directories:
+  output: dist
+  buildResources: electron/icons
+
+files:
+  - electron/**/*
+  - package.json
+  - "!apps/web/.next/cache/**"
+
+extraResources:
+  - from: apps/web
+    to: apps/web
+    filter:
+      - package.json
+      - next.config.mjs
+      - .next/standalone/**
+      - .next/static/**
+      - public/**
+      - telegram-bot.js
+      - "!node_modules/**"
+
+asar: true
+asarUnpack:
+  - apps/web/.next/standalone/**
+  - apps/web/telegram-bot.js
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: electron/icons/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  icon: electron/icons/icon.icns
+  category: public.app-category.productivity
+
+linux:
+  target:
+    - AppImage
+  icon: electron/icons/icon.png
+  category: Utility
+
+publish:
+  provider: github
+  releaseType: release

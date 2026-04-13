@@ -3,7 +3,11 @@ const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+
+if (typeof fetch !== 'function') {
+  console.error('[Telegram Bot] Global fetch is not available. Use Node.js 18+ runtime.');
+  process.exit(1);
+}
 
 // ─── Environment & Config ───────────────────────────────────────────────────
 const DATA_DIR = process.env.TAKEOVER_DATA_DIR || path.join(os.homedir(), '.takeover-data');
@@ -29,6 +33,30 @@ function loadConfig() {
 function saveConfig(config) {
   ensureDir(path.dirname(TELEGRAM_CONFIG_FILE));
   fs.writeFileSync(TELEGRAM_CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
+}
+
+function cleanForTelegram(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/```[\s\S]*?```/g, (m) => m.replace(/```/g, '').trim())
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/_(.+?)_/g, '$1')
+    .replace(/~~(.+?)~~/g, '$1')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function sendSafeMessage(chatId, text, options = undefined) {
+  const cleaned = cleanForTelegram(text);
+  if (!cleaned) return;
+  return bot.sendMessage(chatId, cleaned, options).catch((err) => {
+    console.error('[Telegram Bot] sendMessage failed:', err.message || err);
+  });
 }
 
 let config = loadConfig();
@@ -69,19 +97,19 @@ function verifyUser(msg) {
         config.pairedChatId = chatId;
         config.pairedUserName = msg.from.username || msg.from.first_name || 'User';
         saveConfig(config);
-        bot.sendMessage(chatId, `✅ Successfully paired with Takeover Desktop Agent!`, MAIN_MENU);
+        sendSafeMessage(chatId, 'Successfully paired with Takeover Desktop Agent.', MAIN_MENU);
         return true;
       } else {
-        bot.sendMessage(chatId, `❌ Invalid pairing code.`);
+        sendSafeMessage(chatId, 'Invalid pairing code.');
       }
     } else {
-      bot.sendMessage(chatId, `🔒 Unauthorized. Please pair your device using: /pair <code_from_dashboard>`);
+      sendSafeMessage(chatId, 'Unauthorized. Please pair your device using: /pair <code_from_dashboard>');
     }
     return false;
   }
   
   if (config.pairedChatId !== chatId) {
-    bot.sendMessage(chatId, `🔒 This bot is privately paired to another user.`);
+    sendSafeMessage(chatId, 'This bot is privately paired to another user.');
     return false;
   }
   
@@ -92,13 +120,14 @@ function verifyUser(msg) {
 bot.onText(/^\/start($| )/, (msg) => {
   const chatId = msg.chat.id.toString();
   if (config.pairedChatId === chatId) {
-    bot.sendMessage(chatId, `👋 Active and connected to Takeover Desktop. What can I do for you today?`, MAIN_MENU);
+    sendSafeMessage(chatId, 'Active and connected to Takeover Desktop. What can I do for you today?', MAIN_MENU);
   } else {
-    bot.sendMessage(chatId, `Welcome to Takeover AI.\nTo connect to your desktop agent, please enter: \`/pair <code_from_dashboard>\``, { parse_mode: 'Markdown' });
+    sendSafeMessage(chatId, 'Welcome to Takeover AI. To connect to your desktop agent, use /pair <code_from_dashboard>.');
   }
 });
 
 bot.on('callback_query', async (query) => {
+  if (!query.message) return;
   if (!verifyUser(query.message)) return;
   const data = query.data;
   const chatId = query.message.chat.id;
@@ -107,13 +136,13 @@ bot.on('callback_query', async (query) => {
     let settingsStr = "Settings unavailable";
     try {
       const s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
-      settingsStr = `*Active Provider:* ${s.activeProvider}\n*Safe Mode:* ${s.safeMode ? '✅' : '❌'}\n*Persona:* ${s.persona}`;
+      settingsStr = `Active Provider: ${s.activeProvider}\nSafe Mode: ${s.safeMode ? 'Enabled' : 'Disabled'}\nPersona: ${s.persona}`;
     } catch {}
-    bot.sendMessage(chatId, `*⚙️ Current Settings*\n\n${settingsStr}\n\n(Edit full settings in Desktop UI)`, { parse_mode: 'Markdown' });
+    sendSafeMessage(chatId, `Current Settings\n\n${settingsStr}\n\n(Edit full settings in Desktop UI)`);
   } else if (data === 'cmd_skills') {
-     bot.sendMessage(chatId, `⚡️ Change skills in the Web Dashboard via the "Skills" menu.`);
+     sendSafeMessage(chatId, 'Change skills in the Web Dashboard via the Skills menu.');
   } else if (data === 'cmd_screenshot') {
-    bot.sendMessage(chatId, `📸 Taking screenshot... (Feature in development)`);
+    sendSafeMessage(chatId, 'Taking screenshot... (Feature in development)');
   } else {
     bot.answerCallbackQuery(query.id, { text: 'Not implemented yet' });
   }
@@ -136,24 +165,19 @@ bot.on('message', async (msg) => {
 
     // Handle Photos
     if (msg.photo && msg.photo.length > 0) {
-      bot.sendMessage(chatId, `(Attempting to process image via Vision provider...)`);
+      sendSafeMessage(chatId, 'Attempting to process image via Vision provider...');
       messageText = msg.caption || 'Analyze this image';
     }
     
     // Handle Voice
     if (msg.voice) {
-      bot.sendMessage(chatId, `(Attempting to process voice via Whisper provider...)`);
+      sendSafeMessage(chatId, 'Attempting to process voice via Whisper provider...');
       return; 
     }
 
     if (!messageText) return;
 
-    // Forward to Agent API
-    // Note: We use the same API route as the dashboard, but we don't process SSE stream,
-    // we would actually need an endpoint that returns the full response block or process the stream.
-    // For MVP Telegram Bot, we simulate the request directly for simplicity over polling.
-
-    bot.sendMessage(chatId, `[Agent is thinking...]`);
+    sendSafeMessage(chatId, 'Agent is thinking...');
 
     const res = await fetch(`${API_BASE}/chat/telegram`, {
       method: 'POST',
@@ -167,15 +191,14 @@ bot.on('message', async (msg) => {
 
     if (res.ok) {
         const data = await res.json();
-        // Since we are mocking the telegram chat API (not implemented in route), we just send a stub for now
-        bot.sendMessage(chatId, `*(Reply from Agent API)*\n\n${data.response || 'Success'}`, { parse_mode: 'Markdown' });
+        sendSafeMessage(chatId, data.response || 'Success');
     } else {
-       bot.sendMessage(chatId, `⚠️ **API Error**: The agent is not running or unreachable.`);
+       sendSafeMessage(chatId, 'API error: The agent is not running or unreachable.');
     }
 
   } catch (error) {
     console.error('[Telegram Bot] Error processing message:', error);
-    bot.sendMessage(chatId, `⚠️ **Error processing message:** ${error.message}`);
+    sendSafeMessage(chatId, `Error processing message: ${error.message}`);
   }
 });
 

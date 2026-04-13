@@ -1,0 +1,25 @@
+{
+  "name": "takeover",
+  "version": "1.0.0",
+  "description": "Local AI Desktop Agent — BYOK, Electron + Next.js, Telegram bot",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:electron": "electron .",
+    "build:web": "cd apps/web && npm run build",
+    "build:win": "npm run build:web && electron-builder --win",
+    "build:mac": "npm run build:web && electron-builder --mac",
+    "build:linux": "npm run build:web && electron-builder --linux",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
+    "wait-on": "^7.2.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.8"
+  }
+}

@@ -6,13 +6,20 @@ const fs = require('fs');
 let tray = null;
 
 function createTray(getMainWindow, electronApp, getPort) {
-  // Use a simple icon path — fall back to a blank 16x16 if not found
-  const iconPath = path.join(__dirname, 'icons', 'tray.png');
+  // Prefer shipped tray/app icon assets; fall back to generated icon if unavailable.
+  const iconCandidates = ['tray.png', 'icon.png'];
   let icon;
-  try {
-    icon = nativeImage.createFromPath(iconPath);
-    if (icon.isEmpty()) throw new Error('empty');
-  } catch {
+  for (const name of iconCandidates) {
+    const candidatePath = path.join(__dirname, 'icons', name);
+    if (!fs.existsSync(candidatePath)) continue;
+    const candidate = nativeImage.createFromPath(candidatePath);
+    if (!candidate.isEmpty()) {
+      icon = candidate;
+      break;
+    }
+  }
+
+  if (!icon) {
     // Create a simple programmatic icon (16x16 purple square)
     icon = nativeImage.createFromDataURL(
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAABOSURBVDiNY2BgYPj/n4GBgYGBgeE/A8OANAAHMDAwMDCwMzAwMDRhAGb///8zMDAwMDA8/w8VYCAI/wcGRiD+DxRjDVIMAwMDA8P/BwBe7w+V'

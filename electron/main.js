@@ -34,7 +34,7 @@ function isPortFree(port) {
     const server = net.createServer();
     server.once('error', () => resolve(false));
     server.once('listening', () => server.close(() => resolve(true)));
-    server.listen(port, '127.0.0.1');
+    server.listen(port);
   });
 }
 
@@ -62,6 +62,39 @@ function getWebDir() {
 
 function getDataDir() {
   return process.env.TAKEOVER_DATA_DIR || path.join(app.getPath('home'), '.takeover-data');
+}
+
+function getTelegramConfigPath() {
+  return path.join(getDataDir(), 'integrations', 'telegram.json');
+}
+
+function readTelegramConfig() {
+  try {
+    const configPath = getTelegramConfigPath();
+    if (!fs.existsSync(configPath)) return null;
+    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function getTelegramBotScriptPath() {
+  return path.join(getWebDir(), 'telegram-bot.js');
+}
+
+function getWindowIconPath() {
+  const candidates = process.platform === 'darwin'
+    ? ['icon.icns', 'icon.png']
+    : process.platform === 'win32'
+      ? ['icon.ico', 'icon.png']
+      : ['icon.png', 'icon.ico'];
+
+  for (const file of candidates) {
+    const candidatePath = path.join(__dirname, 'icons', file);
+    if (fs.existsSync(candidatePath)) return candidatePath;
+  }
+
+  return undefined;
 }
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
@@ -108,7 +141,62 @@ function writeSettings(patch) {
 let mainWindow = null;
 let splashWindow = null;
 let serverProcess = null;
+let telegramBotProcess = null;
 let serverReady = false;
+
+function shouldRunTelegramBot() {
+  const cfg = readTelegramConfig();
+  return Boolean(cfg && cfg.enabled && cfg.botToken);
+}
+
+function startTelegramBot() {
+  if (telegramBotProcess) return;
+  if (!shouldRunTelegramBot()) {
+    console.log('[Takeover Telegram] Skipping start (disabled or missing token).');
+    return;
+  }
+
+  const botScript = getTelegramBotScriptPath();
+  if (!fs.existsSync(botScript)) {
+    console.warn('[Takeover Telegram] Bot script not found:', botScript);
+    return;
+  }
+
+  const env = {
+    ...process.env,
+    TAKEOVER_DATA_DIR: getDataDir(),
+    PORT: String(PORT),
+    ELECTRON_RUN_AS_NODE: '1',
+  };
+
+  telegramBotProcess = spawn(process.execPath, [botScript], {
+    cwd: getWebDir(),
+    env,
+    windowsHide: true,
+  });
+
+  telegramBotProcess.stdout.on('data', (data) => {
+    console.log(`[Takeover Telegram] ${String(data).trim()}`);
+  });
+
+  telegramBotProcess.stderr.on('data', (data) => {
+    console.error(`[Takeover Telegram ERR] ${String(data).trim()}`);
+  });
+
+  telegramBotProcess.on('close', (code) => {
+    console.log(`[Takeover Telegram] Process exited (code ${code})`);
+    telegramBotProcess = null;
+
+    if (!app.isQuitting && shouldRunTelegramBot()) {
+      setTimeout(() => {
+        if (!telegramBotProcess && !app.isQuitting) {
+          console.log('[Takeover Telegram] Restarting bot process...');
+          startTelegramBot();
+        }
+      }, 3000);
+    }
+  });
+}
 
 // ─── Splash ───────────────────────────────────────────────────────────────────
 function showSplashError(message) {
@@ -160,7 +248,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'Takeover',
-    icon: path.join(__dirname, 'icons', process.platform === 'darwin' ? 'icon.icns' : 'icon.ico'),
+    icon: getWindowIconPath(),
     show: false,
     backgroundColor: '#050510',
     webPreferences: {
@@ -273,6 +361,7 @@ async function startServer() {
       serverReady = true;
       console.log('[Takeover] Server ready — opening window.');
       createWindow();
+      startTelegramBot();
     }
   });
 
@@ -311,6 +400,7 @@ async function startServer() {
       console.warn('[Takeover] Timeout — opening window anyway.');
       serverReady = true;
       createWindow();
+      startTelegramBot();
     }
   }, 45000);
 }
@@ -355,10 +445,24 @@ function stopServer() {
   });
 }
 
+function stopTelegramBot() {
+  return new Promise((resolve) => {
+    if (!telegramBotProcess) return resolve();
+    const proc = telegramBotProcess;
+    telegramBotProcess = null;
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    proc.once('exit', finish);
+    try { proc.kill('SIGTERM'); } catch (_) {}
+    const timer = setTimeout(() => { try { proc.kill('SIGKILL'); } catch (_) {} finish(); }, 5000);
+    if (timer.unref) timer.unref();
+  });
+}
+
 app.on('before-quit', (event) => {
   app.isQuitting = true;
-  if (serverProcess) {
+  if (serverProcess || telegramBotProcess) {
     event.preventDefault();
-    stopServer().then(() => app.quit());
+    Promise.all([stopServer(), stopTelegramBot()]).then(() => app.quit());
   }
 });

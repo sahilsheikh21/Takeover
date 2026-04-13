@@ -7,7 +7,7 @@ import type { LLMTool } from './providers';
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
-const DATA_DIR = process.env.TAKEOVER_DATA_DIR || path.join(os.homedir(), '.takeover-data');
+const DATA_DIR = process.env.TAKEOVER_DATA_DIR || path.join(process.cwd(), '.takeover-data');
 const WORKSPACE = path.join(DATA_DIR, 'workspace');
 const CHROME_PROFILE_DIR = path.join(DATA_DIR, 'chrome-profile');
 

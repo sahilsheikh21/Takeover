@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { Image as ImageIcon, Send, Loader2, Download, Trash2, Sparkles, ZoomIn, X } from 'lucide-react';
+import { consumeSSE } from '@/lib/sse';
 
 interface GeneratedImage {
   id: string;
@@ -40,30 +41,16 @@ export default function StudioPage() {
         body: JSON.stringify({ message: `Use the generate_image tool to create an image with this prompt: "${currentPrompt}". Return only the base64 data URI from the tool result, nothing else.` }),
       });
 
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      if (!reader) return;
-
       let dataUri = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n\n');
-        for (const line of lines) {
-          if (!line.startsWith('event: ')) continue;
-          const [el, dl] = line.split('\n');
-          const event = el.replace('event: ', '').trim();
-          const dataStr = dl?.replace('data: ', '').trim();
-          if (!dataStr) continue;
-          try {
-            const d = JSON.parse(dataStr);
-            if (event === 'toolEnd' && d.result?.startsWith('data:image')) {
-              dataUri = d.result;
-            }
-          } catch {}
+      await consumeSSE(res.body, (event, data) => {
+        const payload = typeof data === 'string' || data === null ? {} : data;
+        if (event === 'toolEnd') {
+          const result = String(payload.result || '');
+          if (result.startsWith('data:image')) {
+            dataUri = result;
+          }
         }
-      }
+      });
 
       if (dataUri) {
         const newImg: GeneratedImage = {

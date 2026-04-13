@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { loadSettings, loadSkills, appendMessage, generateId } from '@/lib/data';
+import { loadSettings, loadSkills, appendMessage, generateId, loadSession } from '@/lib/data';
 import { runAgentNonStreaming } from '@/lib/agent';
 import type { Message } from '@/types';
 
@@ -27,6 +27,8 @@ export async function POST(req: NextRequest) {
     // We use a shared sessionId per telegramChatId for continuous context
     const sid = `tg_${telegramChatId}`;
 
+    const previousSessionMessages = loadSession(sid)?.messages || [];
+
     const userMsg: Message = {
       id: generateId(),
       role: 'user',
@@ -43,8 +45,8 @@ export async function POST(req: NextRequest) {
     const result = await runAgentNonStreaming(message, {
       settings,
       enabledSkillIds,
-      // Load previous context
-      sessionMessages: loadSession(sid)?.messages || [],
+      // Provide prior context only; this request's user message is appended by runAgent.
+      sessionMessages: previousSessionMessages,
     });
 
     const assistantMsg: Message = {

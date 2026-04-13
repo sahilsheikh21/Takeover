@@ -1,0 +1,48 @@
+node_modules/
+dist/
+.next/
+apps/web/.next/
+apps/web/node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*
+!.env.example
+
+# App runtime data
+.takeover-data/
+
+# Build/test artifacts
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local backup/worktree copies
+.Copy From Here/
+
+# Planning and docs
+.planning/
+*.md
+!README.md
+
+# Explicit planning state files
+.planning/PROJECT.md
+.planning/ROADMAP.md
+.planning/STATE.md
+
+

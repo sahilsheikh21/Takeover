@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 
 export const runtime = 'nodejs';
 
-const DATA_DIR = process.env.TAKEOVER_DATA_DIR || path.join(os.homedir(), '.takeover-data');
+const DATA_DIR = process.env.TAKEOVER_DATA_DIR || path.join(process.cwd(), '.takeover-data');
 const WORKSPACE = path.join(DATA_DIR, 'workspace');
 
 function ensureDir(dir: string) {

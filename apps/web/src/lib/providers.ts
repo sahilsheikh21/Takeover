@@ -104,14 +104,43 @@ async function* streamOpenAICompatible(
   model: string,
   apiKey: string,
   baseUrl: string,
-  tools?: LLMTool[]
+  tools?: LLMTool[],
+  extraHeaders?: Record<string, string>
 ): AsyncGenerator<LLMChunk> {
+  const mappedMessages = messages.map((m) => {
+    if (m.role === 'tool') {
+      const toolCallId = m.toolCalls?.[0]?.id || m.id;
+      return {
+        role: 'tool',
+        content: m.content,
+        tool_call_id: toolCallId,
+      };
+    }
+
+    if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
+      return {
+        role: 'assistant',
+        content: m.content || null,
+        tool_calls: m.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function',
+          function: {
+            name: tc.name,
+            arguments: JSON.stringify(tc.arguments || {}),
+          },
+        })),
+      };
+    }
+
+    return {
+      role: m.role,
+      content: m.content,
+    };
+  });
+
   const body: Record<string, unknown> = {
     model,
-    messages: messages.map(m => ({
-      role: m.role === 'tool' ? 'tool' : m.role,
-      content: m.content,
-    })),
+    messages: mappedMessages,
     stream: true,
     temperature: 0.7,
   };
@@ -126,6 +155,7 @@ async function* streamOpenAICompatible(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
+      ...(extraHeaders || {}),
     },
     body: JSON.stringify(body),
   });
@@ -319,6 +349,21 @@ const PROVIDER_URLS: Partial<Record<ProviderName, string>> = {
   lmstudio:   'http://localhost:1234/v1',
 };
 
+const PROVIDER_ENV_KEYS: Partial<Record<ProviderName, string>> = {
+  openai: 'OPENAI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  google: 'GOOGLE_API_KEY',
+  groq: 'GROQ_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+  mistral: 'MISTRAL_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
+  xai: 'XAI_API_KEY',
+  fireworks: 'FIREWORKS_API_KEY',
+  together: 'TOGETHER_API_KEY',
+  cohere: 'COHERE_API_KEY',
+  perplexity: 'PERPLEXITY_API_KEY',
+};
+
 // ─── Default models by provider ───────────────────────────────────────────────
 export const DEFAULT_MODELS: Partial<Record<ProviderName, string>> = {
   ollama:     'qwen2.5:3b-instruct',
@@ -346,7 +391,8 @@ export async function* streamResponse(
   const provider = settings.activeProvider;
   const providerConfig = settings.providers[provider] || {};
   const model = providerConfig.model || DEFAULT_MODELS[provider] || 'default';
-  const apiKey = providerConfig.apiKey || '';
+  const envKey = PROVIDER_ENV_KEYS[provider];
+  const apiKey = providerConfig.apiKey || (envKey ? process.env[envKey] || '' : '');
 
   try {
     switch (provider) {
@@ -371,8 +417,17 @@ export async function* streamResponse(
         yield* streamOpenAICompatible(messages, model, apiKey, base, tools);
         break;
       }
+      case 'openrouter': {
+        const base = providerConfig.baseUrl || PROVIDER_URLS.openrouter!;
+        const extraHeaders: Record<string, string> = {
+          'HTTP-Referer': process.env.OPENROUTER_HTTP_REFERER || 'http://localhost',
+          'X-Title': process.env.OPENROUTER_APP_TITLE || 'Takeover',
+        };
+        yield* streamOpenAICompatible(messages, model, apiKey, base, tools, extraHeaders);
+        break;
+      }
       default: {
-        const base = PROVIDER_URLS[provider] || `https://api.${provider}.com/v1`;
+        const base = providerConfig.baseUrl || PROVIDER_URLS[provider] || `https://api.${provider}.com/v1`;
         yield* streamOpenAICompatible(messages, model, apiKey, base, tools);
       }
     }

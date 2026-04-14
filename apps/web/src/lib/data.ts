@@ -34,10 +34,31 @@ const DEFAULT_SETTINGS: Settings = {
       model: process.env.OLLAMA_MODEL || 'qwen2.5:3b-instruct',
       baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
     },
+    openrouter: {
+      model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+      apiKey: process.env.OPENROUTER_API_KEY || '',
+      baseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+    },
   },
   persona: 'default',
   safeMode: false,
   isAutonomousMode: false,
+  mcpServers: [
+    {
+      id: 'mcp_fs_workspace',
+      name: 'Filesystem (Workspace)',
+      command: 'npx',
+      args: '-y @modelcontextprotocol/server-filesystem ./.takeover-data/workspace',
+      enabled: false,
+    },
+    {
+      id: 'mcp_fetch',
+      name: 'Fetch',
+      command: 'npx',
+      args: '-y @modelcontextprotocol/server-fetch',
+      enabled: false,
+    },
+  ],
 };
 
 export function loadSettings(): Settings {

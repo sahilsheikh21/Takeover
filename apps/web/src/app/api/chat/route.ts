@@ -1,6 +1,11 @@
 import { NextRequest } from 'next/server';
 import { loadSettings, loadSkills, appendMessage, generateId, loadSession } from '@/lib/data';
 import { runAgent } from '@/lib/agent';
+import {
+  createApprovalRequest,
+  listApprovedToolNamesForSession,
+  listPendingApprovalsForSession,
+} from '@/lib/runtime-registry';
 import type { Message } from '@/types';
 
 export const runtime = 'nodejs';
@@ -38,6 +43,7 @@ export async function POST(req: NextRequest) {
 
         const sid = sessionId || generateId();
         const previousSessionMessages = loadSession(sid)?.messages || [];
+        const approvedTools = listApprovedToolNamesForSession(sid);
 
         // Build user message
         const userMsg: Message = {
@@ -58,9 +64,10 @@ export async function POST(req: NextRequest) {
 
         let fullResponse = '';
 
-        await runAgent(userMsg.content, {
+        const result = await runAgent(userMsg.content, {
           settings,
           enabledSkillIds,
+          approvedTools,
           // Provide prior context only; the current user message is appended by runAgent.
           sessionMessages: previousSessionMessages,
           onText: (chunk) => {
@@ -72,6 +79,20 @@ export async function POST(req: NextRequest) {
           },
           onToolEnd: (name, result) => {
             send('toolEnd', { name, result: result.slice(0, 500) });
+          },
+          onToolBlocked: (name, reason, args) => {
+            send('toolBlocked', { name, reason });
+
+            if (reason.includes('Safe Mode blocked')) {
+              const approval = createApprovalRequest({
+                sessionId: sid,
+                source: 'dashboard',
+                toolName: name,
+                args,
+                reason,
+              });
+              send('approvalRequired', { approval });
+            }
           },
           onError: (err) => {
             send('error', { error: err });
@@ -88,7 +109,17 @@ export async function POST(req: NextRequest) {
         };
         appendMessage(sid, assistantMsg);
 
-        send('done', { sessionId: sid, messageId: assistantMsg.id });
+        const pendingApprovals = listPendingApprovalsForSession(sid);
+        send('done', {
+          sessionId: sid,
+          messageId: assistantMsg.id,
+          success: result.success,
+          steps: result.steps,
+          totalToolCalls: result.totalToolCalls,
+          toolsUsed: result.toolsUsed,
+          blockedTools: result.blockedTools,
+          pendingApprovals,
+        });
       } catch (err) {
         const e = err as Error;
         send('error', { error: e.message || 'Internal server error' });

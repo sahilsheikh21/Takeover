@@ -4,14 +4,28 @@ Local-first AI desktop agent built with Electron + Next.js.
 
 Takeover runs on your machine, stores app state locally, and lets you use your own model providers. It includes a desktop dashboard, multi-provider chat, a task workflow, a built-in skills/tooling system, and Telegram integration for remote control.
 
+## Manual
+
+- Full feature manual: [MANUAL.md](MANUAL.md)
+
 ## Highlights
 
 - Local data storage under `.takeover-data` (or `TAKEOVER_DATA_DIR` override)
 - BYOK provider setup with support for multiple LLM providers
 - Dashboard modules: Chat, Planner, Codework, Browser, Skills, Studio, Settings
-- Telegram bot pairing for mobile-first interaction
+- Telegram bot user-ID auth for mobile-first interaction
 - Session persistence and file/workspace utilities
 - Electron tray integration and custom splash screen
+
+## Feature Inventory
+
+- Chat agent with streaming SSE, multi-step tool loop, safe-mode tool gating, approvals, and session persistence
+- Dashboard modules: Chat, Codework, Browser, Planner, Studio, Skills, Settings
+- Registry-backed runtime services: tasks, teams, cron jobs, approval requests
+- Telegram bot integration: user-ID auth, text chat, image forwarding, document ingest, inline approvals, optional voice transcription + voice reply
+- MCP server configuration with built-in presets and startup smoke-test
+- Tooling surface: filesystem, command execution, code execution, web search, browser extraction, image generation, runtime task/team/cron controls
+- Multi-provider support: Ollama, OpenAI, Anthropic, Google, Groq, OpenRouter, Mistral, DeepSeek, xAI, Fireworks, Together, Cohere, Perplexity, LM Studio, custom OpenAI-compatible endpoint
 
 ## Tech Stack
 
@@ -119,9 +133,18 @@ OLLAMA_MODEL=qwen2.5:3b-instruct
 1. Create a bot with `@BotFather` and copy your token.
 2. Open Takeover -> Settings -> Telegram.
 3. Enable Telegram and paste the bot token.
-4. Generate (or set) a pairing code and save settings.
+4. Set your Telegram numeric user ID in `Allowed User ID` and save settings.
 5. Restart the desktop app.
-6. In Telegram, send `/start` to your bot and pair using `/pair <CODE>`.
+6. In Telegram, send `/start` to your bot.
+7. If needed, send `/whoami` in Telegram to confirm your numeric user ID.
+
+## MCP Setup
+
+1. Open Takeover -> Settings -> MCP Servers.
+2. Click `Add Presets` to add Filesystem and Fetch MCP templates.
+3. Set command/args/cwd as needed and enable the servers you want.
+4. Use `Test` to run a startup smoke-test for each server.
+5. Save settings and restart the desktop app.
 
 Telegram config is stored locally at:
 
@@ -173,7 +196,8 @@ Build output is generated into:
 
 1. App does not open: ensure no duplicate instance is already running and local ports `3000-3005` are not all occupied.
 2. Provider errors: verify API key/model in Settings and confirm internet connectivity for hosted providers.
-3. Telegram bot does not respond: verify token and enabled flag, restart after Telegram settings changes, then re-pair with a fresh code.
+3. Telegram bot does not respond: verify token and enabled flag, confirm `Allowed User ID` matches your Telegram user ID (use `/whoami`), then restart after Telegram settings changes.
+4. MCP server test fails: verify command path and args, try running the same command in a terminal first, then set `cwd` explicitly in MCP settings.
 
 ## License
 

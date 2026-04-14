@@ -62,6 +62,16 @@ export interface TTSConfig {
   azureVoiceName?: string;
 }
 
+export interface MCPServerConfig {
+  id: string;
+  name: string;
+  command: string;
+  args?: string;
+  cwd?: string;
+  enabled: boolean;
+  env?: Record<string, string>;
+}
+
 export interface Settings {
   activeProvider: ProviderName;
   providers: Partial<Record<ProviderName, ProviderConfig>>;
@@ -69,6 +79,7 @@ export interface Settings {
   safeMode: boolean;
   isAutonomousMode: boolean;
   ttsConfig?: TTSConfig;
+  mcpServers?: MCPServerConfig[];
   nativeLanguage?: string;
   desktopBuddy?: boolean;
   telemetry_enabled?: boolean;
@@ -120,6 +131,7 @@ export interface ChatResponse {
   error?: string;
   requiresApproval?: boolean;
   approvalId?: string;
+  pendingApprovals?: ApprovalRequest[];
   generatedMedia?: GeneratedMedia[];
   voiceAlreadySent?: boolean;
 }
@@ -128,6 +140,41 @@ export interface GeneratedMedia {
   type: 'image' | 'video';
   filepath: string;
   prompt?: string;
+}
+
+export interface ApprovalRequest {
+  id: string;
+  sessionId: string;
+  source: 'dashboard' | 'telegram';
+  toolName: string;
+  args: Record<string, unknown>;
+  reason: string;
+  status: 'pending' | 'approved' | 'denied';
+  createdAt: number;
+  updatedAt: number;
+  telegramChatId?: string;
+  telegramUserName?: string;
+  decisionBy?: string;
+}
+
+export interface TeamRuntimeRecord {
+  id: string;
+  name: string;
+  members: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CronRuntimeRecord {
+  id: string;
+  name: string;
+  schedule: string;
+  prompt: string;
+  target: 'dashboard' | 'telegram';
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+  lastRunAt?: number;
 }
 
 // Session / conversation types
@@ -146,9 +193,11 @@ export interface TelegramConfig {
   enabled: boolean;
   botToken?: string;
   botUsername?: string;
-  pairingCode?: string;
+  allowedUserId?: string;
   pairedChatId?: string;
+  pairedUserId?: string;
   pairedUserName?: string;
+  voiceReplies?: boolean;
 }
 
 // Inbox (Telegram ↔ dashboard bridge)

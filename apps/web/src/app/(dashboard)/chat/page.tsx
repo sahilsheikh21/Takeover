@@ -10,11 +10,20 @@ import { consumeSSE } from '@/lib/sse';
 
 const CHAT_STORAGE_KEY = 'takeover.dashboard.chat.v1';
 
+interface PendingApproval {
+  id: string;
+  sessionId: string;
+  toolName: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'denied';
+}
+
 export default function ChatPage() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [isStorageReady, setIsStorageReady] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -62,6 +71,48 @@ export default function ChatPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (!sessionId) {
+      setPendingApprovals([]);
+      return;
+    }
+
+    void loadPendingApprovals(sessionId);
+  }, [sessionId]);
+
+  async function loadPendingApprovals(currentSessionId: string) {
+    try {
+      const res = await fetch(`/api/approvals?sessionId=${encodeURIComponent(currentSessionId)}&status=pending`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.approvals)) {
+        setPendingApprovals(data.approvals as PendingApproval[]);
+      }
+    } catch {
+      // keep chat usable even if approval endpoint is unavailable
+    }
+  }
+
+  async function decideApproval(id: string, action: 'approve' | 'deny') {
+    try {
+      const res = await fetch('/api/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          id,
+          decisionBy: 'dashboard-user',
+        }),
+      });
+
+      const data = await res.json();
+      if (!data.success) return;
+
+      setPendingApprovals((prev) => prev.filter((item) => item.id !== id));
+    } catch {
+      // ignore and leave pending approval visible
+    }
+  }
 
   async function handleSend(e?: React.FormEvent) {
     if (e) e.preventDefault();
@@ -142,6 +193,30 @@ export default function ChatPage() {
           return;
         }
 
+        if (event === 'toolBlocked') {
+          currentAssistantMessage += `\n\n> Tool blocked: ${String(payload.name || 'unknown')} (${String(payload.reason || 'policy')})\n\n`;
+          setMessages((prev) => {
+            const newMsgs = [...prev];
+            const last = newMsgs[newMsgs.length - 1];
+            if (last && last.role === 'assistant' && last.isStreaming) {
+              last.content = currentAssistantMessage;
+            }
+            return newMsgs;
+          });
+          return;
+        }
+
+        if (event === 'approvalRequired') {
+          const approval = payload.approval as PendingApproval | undefined;
+          if (approval?.id) {
+            setPendingApprovals((prev) => {
+              if (prev.some((item) => item.id === approval.id)) return prev;
+              return [approval, ...prev];
+            });
+          }
+          return;
+        }
+
         if (event === 'error') {
           const errorMessage = String(payload.error || 'Unknown error');
           currentAssistantMessage += `\n\n**Error:** ${errorMessage}`;
@@ -157,6 +232,11 @@ export default function ChatPage() {
         }
 
         if (event === 'done') {
+          const sessionPending = Array.isArray(payload.pendingApprovals)
+            ? (payload.pendingApprovals as PendingApproval[])
+            : [];
+          setPendingApprovals(sessionPending);
+
           setMessages((prev) => {
             const newMsgs = [...prev];
             const last = newMsgs[newMsgs.length - 1];
@@ -266,6 +346,36 @@ export default function ChatPage() {
 
       <div className="p-4 bg-[rgba(0,0,0,0.82)] [backdrop-filter:saturate(180%)_blur(20px)] border-t border-white/15">
         <div className="max-w-4xl mx-auto relative group">
+          {pendingApprovals.length > 0 && (
+            <div className="mb-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-3">
+              <div className="mb-2 text-xs uppercase tracking-[0.12em] text-amber-200">Pending approvals</div>
+              <div className="space-y-2">
+                {pendingApprovals.slice(0, 6).map((approval) => (
+                  <div key={approval.id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm text-white">{approval.toolName}</div>
+                      <div className="truncate text-xs text-[var(--text-muted)]">{approval.reason}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void decideApproval(approval.id, 'approve')}
+                      className="rounded-full border border-emerald-400/40 px-3 py-1 text-xs text-emerald-200 transition-colors hover:bg-emerald-500/20"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void decideApproval(approval.id, 'deny')}
+                      className="rounded-full border border-rose-400/40 px-3 py-1 text-xs text-rose-200 transition-colors hover:bg-rose-500/20"
+                    >
+                      Deny
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSend} className="relative flex items-end gradient-border">
             <textarea
               value={input}

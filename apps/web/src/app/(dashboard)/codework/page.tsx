@@ -111,6 +111,8 @@ export default function CodeworkPage() {
   const [activeFile, setActiveFile] = useState<{ path: string; content: string } | null>(null);
   const [selectedDiffPath, setSelectedDiffPath] = useState('');
   const [task, setTask] = useState('');
+  const [codeSnippet, setCodeSnippet] = useState("console.log('Hello from Takeover Codework');");
+  const [isSnippetRunning, setIsSnippetRunning] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [output, setOutput] = useState<string[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
@@ -214,7 +216,20 @@ export default function CodeworkPage() {
           return;
         }
 
+        if (event === 'toolBlocked') {
+          const name = String(payload.name || 'unknown');
+          const reason = String(payload.reason || 'blocked by policy');
+          setOutput((prev) => [...prev, `⚠ Blocked: ${name} (${reason})`]);
+          return;
+        }
+
         if (event === 'done') {
+          const used = Array.isArray(payload.toolsUsed) ? payload.toolsUsed.length : 0;
+          const blocked = Array.isArray(payload.blockedTools) ? payload.blockedTools.length : 0;
+          const steps = Number(payload.steps || 0);
+          if (steps > 0 || used > 0 || blocked > 0) {
+            setOutput((prev) => [...prev, `ℹ Run summary: ${steps} step(s), ${used} tool call(s), ${blocked} blocked.`]);
+          }
           setOutput((prev) => [...prev, `\n${fullReply}`]);
         }
       });
@@ -243,6 +258,37 @@ export default function CodeworkPage() {
       setOutput((prev) => [...prev, `✗ Error: ${(error as Error).message}`]);
     } finally {
       setIsRunning(false);
+      setTimeout(() => {
+        terminalRef.current?.scrollTo(0, terminalRef.current.scrollHeight);
+      }, 80);
+    }
+  }
+
+  async function runSnippet() {
+    if (!codeSnippet.trim() || isSnippetRunning) return;
+
+    setIsSnippetRunning(true);
+    setOutput((prev) => [...prev, '> Running code snippet...']);
+
+    try {
+      const res = await fetch('/api/code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: codeSnippet }),
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        setOutput((prev) => [...prev, `✗ Snippet error: ${String(data.error || 'Unknown error')}`]);
+        return;
+      }
+
+      const result = String(data.result || '(No output)');
+      setOutput((prev) => [...prev, `✓ Snippet completed`, result]);
+    } catch (error) {
+      setOutput((prev) => [...prev, `✗ Snippet request failed: ${(error as Error).message}`]);
+    } finally {
+      setIsSnippetRunning(false);
       setTimeout(() => {
         terminalRef.current?.scrollTo(0, terminalRef.current.scrollHeight);
       }, 80);
@@ -493,6 +539,33 @@ export default function CodeworkPage() {
           </div>
 
           <div className="border-t border-white/10 p-3">
+            <div className="mb-3 rounded-xl border border-white/10 bg-white/5 p-3">
+              <div className="mb-2 text-[11px] uppercase tracking-[0.12em] text-[var(--text-subtle)]">Run Code Snippet</div>
+              <textarea
+                value={codeSnippet}
+                onChange={(e) => setCodeSnippet(e.target.value)}
+                rows={6}
+                className="w-full resize-y rounded-xl border border-white/15 bg-[#1d1d1f] px-3 py-2 font-mono text-xs text-white outline-none transition-colors focus:border-[#0071e3]"
+                placeholder="Write Node.js code to execute..."
+                disabled={isSnippetRunning || isRunning}
+              />
+
+              <div className="mt-2 flex items-center justify-between">
+                <div className="text-[10px] text-[var(--text-subtle)]">
+                  Executes via the built-in run_code tool.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void runSnippet()}
+                  disabled={!codeSnippet.trim() || isSnippetRunning || isRunning}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#0071e3] px-3 py-1.5 text-xs text-white transition-colors hover:bg-[#0077ed] disabled:opacity-40"
+                >
+                  <Play size={12} />
+                  {isSnippetRunning ? 'Running...' : 'Run Code'}
+                </button>
+              </div>
+            </div>
+
             <form
               onSubmit={(e) => {
                 e.preventDefault();

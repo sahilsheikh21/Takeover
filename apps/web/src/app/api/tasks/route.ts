@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import {
+  appendTaskOutput,
+  createTaskRecord,
+  deleteTaskRecord,
+  getTaskRecord,
+  listTaskRecords,
+  normalizeTaskStatus,
+  stopTaskRecord,
+  toLegacyTaskStatus,
+  updateTaskRecord,
+} from '@/lib/runtime-registry';
 
 export const runtime = 'nodejs';
-
-const DATA_DIR = process.env.TAKEOVER_DATA_DIR || path.join(process.cwd(), '.takeover-data');
-const TASKS_FILE = path.join(DATA_DIR, 'memory', 'tasks.json');
-
-function ensureDir(dir: string) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
 
 export interface Task {
   id: string;
@@ -21,20 +23,29 @@ export interface Task {
   result?: string;
 }
 
-function loadTasks(): Task[] {
-  try {
-    if (fs.existsSync(TASKS_FILE)) return JSON.parse(fs.readFileSync(TASKS_FILE, 'utf-8'));
-  } catch {}
-  return [];
-}
-
-function saveTasks(tasks: Task[]): void {
-  ensureDir(path.dirname(TASKS_FILE));
-  fs.writeFileSync(TASKS_FILE, JSON.stringify(tasks, null, 2), 'utf-8');
+function toLegacyTask(task: {
+  id: string;
+  title: string;
+  description?: string;
+  status: string;
+  createdAt: number;
+  updatedAt: number;
+  result?: string;
+}): Task {
+  return {
+    id: task.id,
+    title: task.title,
+    description: task.description,
+    status: toLegacyTaskStatus(normalizeTaskStatus(task.status)),
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    result: task.result,
+  };
 }
 
 export async function GET() {
-  return NextResponse.json({ success: true, tasks: loadTasks() });
+  const tasks = listTaskRecords().map(toLegacyTask);
+  return NextResponse.json({ success: true, tasks });
 }
 
 export async function POST(req: NextRequest) {
@@ -42,35 +53,56 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action, id, title, description, status, result } = body;
 
-    const tasks = loadTasks();
-
     if (action === 'create') {
-      const task: Task = {
-        id: `task_${Date.now()}`,
+      const task = createTaskRecord({
         title: title || 'Untitled Task',
         description,
-        status: 'pending',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-      tasks.unshift(task);
-      saveTasks(tasks);
-      return NextResponse.json({ success: true, task });
+      });
+      return NextResponse.json({ success: true, task: toLegacyTask(task) });
     }
 
     if (action === 'update') {
-      const idx = tasks.findIndex(t => t.id === id);
-      if (idx === -1) return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 });
-      if (status) tasks[idx].status = status;
-      if (result !== undefined) tasks[idx].result = result;
-      tasks[idx].updatedAt = Date.now();
-      saveTasks(tasks);
-      return NextResponse.json({ success: true, task: tasks[idx] });
+      const updated = updateTaskRecord(String(id), {
+        status: status ? normalizeTaskStatus(String(status)) : undefined,
+        result,
+      });
+      if (!updated) {
+        return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, task: toLegacyTask(updated) });
+    }
+
+    if (action === 'append_output') {
+      const line = String(body.line || '');
+      const updated = appendTaskOutput(String(id), line);
+      if (!updated) {
+        return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, task: toLegacyTask(updated) });
+    }
+
+    if (action === 'get') {
+      const task = getTaskRecord(String(id));
+      if (!task) {
+        return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 });
+      }
+      return NextResponse.json({
+        success: true,
+        task: toLegacyTask(task),
+        output: task.output,
+      });
+    }
+
+    if (action === 'stop') {
+      const task = stopTaskRecord(String(id));
+      if (!task) {
+        return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, task: toLegacyTask(task) });
     }
 
     if (action === 'delete') {
-      const filtered = tasks.filter(t => t.id !== id);
-      saveTasks(filtered);
+      deleteTaskRecord(String(id));
       return NextResponse.json({ success: true });
     }
 

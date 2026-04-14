@@ -35,6 +35,10 @@ Thumbs.db
 # Local backup/worktree copies
 .Copy From Here/
 
+# Local MCP experimentation files
+.mcp/
+mcp-settings.local.json
+
 # Planning and docs
 .planning/
 *.md

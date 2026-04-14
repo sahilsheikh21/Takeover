@@ -4,6 +4,20 @@ import os from 'os';
 import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import type { LLMTool } from './providers';
+import {
+  createCronRecord,
+  createTaskRecord,
+  createTeamRecord,
+  deleteCronRecord,
+  deleteTeamRecord,
+  getTaskRecord,
+  listCronRecords,
+  listTaskRecords,
+  listTeamRecords,
+  normalizeTaskStatus,
+  stopTaskRecord,
+  updateTaskRecord,
+} from './runtime-registry';
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
@@ -15,6 +29,104 @@ const CHROME_PROFILE_DIR = path.join(DATA_DIR, 'chrome-profile');
 export interface Tool {
   definition: LLMTool;
   execute: (args: Record<string, unknown>) => Promise<string>;
+}
+
+export interface ToolPermissionInput {
+  safeMode: boolean;
+  toolName: string;
+  args: Record<string, unknown>;
+  approved?: boolean;
+}
+
+export interface ToolPermissionDecision {
+  allowed: boolean;
+  reason: string;
+}
+
+const SAFE_MODE_GATED_TOOLS = new Set([
+  'write_file',
+  'run_command',
+  'run_code',
+]);
+
+const DANGEROUS_COMMAND_PATTERNS: RegExp[] = [
+  /(^|\s)rm\s+-rf(\s|$)/i,
+  /(^|\s)del\s+\/f/i,
+  /remove-item\s+-recurse\s+-force/i,
+  /(^|\s)format(\s|$)/i,
+  /(^|\s)mkfs(\.|\s|$)/i,
+  /(^|\s)shutdown(\s|$)/i,
+  /(^|\s)reboot(\s|$)/i,
+  /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\};\s*:/,
+  /(^|\s)dd\s+if=/i,
+];
+
+const HIGH_RISK_CODE_PATTERNS: RegExp[] = [
+  /require\(['"]child_process['"]\)/,
+  /import\s+.*from\s+['"]child_process['"]/
+];
+
+export function validateCommandSafety(command: string): string | null {
+  const trimmed = command.trim();
+  if (!trimmed) {
+    return 'Command is empty.';
+  }
+
+  for (const pattern of DANGEROUS_COMMAND_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      return 'Command blocked by safety policy (destructive pattern detected).';
+    }
+  }
+
+  return null;
+}
+
+export function evaluateToolPermission(input: ToolPermissionInput): ToolPermissionDecision {
+  const { safeMode, toolName, args, approved } = input;
+
+  if (toolName === 'run_command') {
+    const command = String(args.command || '');
+    const commandIssue = validateCommandSafety(command);
+    if (commandIssue) {
+      return { allowed: false, reason: commandIssue };
+    }
+  }
+
+  if (toolName === 'run_code') {
+    const code = String(args.code || '');
+    for (const pattern of HIGH_RISK_CODE_PATTERNS) {
+      if (pattern.test(code)) {
+        return {
+          allowed: false,
+          reason: 'Code execution blocked by safety policy (high-risk module access).',
+        };
+      }
+    }
+  }
+
+  if (!safeMode) {
+    return { allowed: true, reason: 'allowed' };
+  }
+
+  if (approved) {
+    return { allowed: true, reason: 'approved' };
+  }
+
+  if (SAFE_MODE_GATED_TOOLS.has(toolName)) {
+    return {
+      allowed: false,
+      reason: `Safe Mode blocked ${toolName}. Approve this tool in-session to continue.`,
+    };
+  }
+
+  if (toolName === 'browser_action' && String(args.action || '') === 'click') {
+    return {
+      allowed: false,
+      reason: 'Safe Mode blocked browser click action. Use navigate/extract or approve this tool.',
+    };
+  }
+
+  return { allowed: true, reason: 'allowed' };
 }
 
 function safeJoin(base: string, userPath: string): string {
@@ -128,11 +240,17 @@ const tools: Record<string, Tool> = {
     },
     async execute({ command, cwd }) {
       try {
+        const commandText = String(command || '');
+        const safetyIssue = validateCommandSafety(commandText);
+        if (safetyIssue) {
+          return `Error: ${safetyIssue}`;
+        }
+
         const shell = process.platform === 'win32' ? 'cmd' : 'sh';
         const flag  = process.platform === 'win32' ? '/c' : '-c';
         const workDir = cwd ? safeJoin(WORKSPACE, String(cwd)) : WORKSPACE;
 
-        const { stdout, stderr } = await execFileAsync(shell, [flag, String(command)], {
+        const { stdout, stderr } = await execFileAsync(shell, [flag, commandText], {
           cwd: workDir,
           timeout: 30_000,
           maxBuffer: 1024 * 1024,
@@ -247,6 +365,239 @@ const tools: Record<string, Tool> = {
           }
         }
       }
+    },
+  },
+
+  task_create: {
+    definition: {
+      name: 'task_create',
+      description: 'Create a task in the runtime task registry.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Task title' },
+          description: { type: 'string', description: 'Optional task description' },
+          teamId: { type: 'string', description: 'Optional team id' },
+        },
+        required: ['title'],
+      },
+    },
+    async execute({ title, description, teamId }) {
+      const task = createTaskRecord({
+        title: String(title || 'Untitled Task'),
+        description: description ? String(description) : undefined,
+        teamId: teamId ? String(teamId) : undefined,
+      });
+      return JSON.stringify(task, null, 2);
+    },
+  },
+
+  task_get: {
+    definition: {
+      name: 'task_get',
+      description: 'Get a task by id from the runtime task registry.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Task id' },
+        },
+        required: ['id'],
+      },
+    },
+    async execute({ id }) {
+      const task = getTaskRecord(String(id || ''));
+      if (!task) return 'Task not found.';
+      return JSON.stringify(task, null, 2);
+    },
+  },
+
+  task_list: {
+    definition: {
+      name: 'task_list',
+      description: 'List tasks from the runtime task registry.',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', description: 'Optional task status filter' },
+        },
+      },
+    },
+    async execute({ status }) {
+      const desiredStatus = status ? normalizeTaskStatus(String(status)) : null;
+      const tasks = listTaskRecords().filter((t) => !desiredStatus || t.status === desiredStatus);
+      return JSON.stringify(tasks, null, 2);
+    },
+  },
+
+  task_update: {
+    definition: {
+      name: 'task_update',
+      description: 'Update task status or result in runtime task registry.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Task id' },
+          status: { type: 'string', description: 'Task status' },
+          result: { type: 'string', description: 'Optional result text' },
+          error: { type: 'string', description: 'Optional error text' },
+        },
+        required: ['id'],
+      },
+    },
+    async execute({ id, status, result, error }) {
+      const task = updateTaskRecord(String(id || ''), {
+        status: status ? normalizeTaskStatus(String(status)) : undefined,
+        result: result ? String(result) : undefined,
+        error: error ? String(error) : undefined,
+      });
+      if (!task) return 'Task not found.';
+      return JSON.stringify(task, null, 2);
+    },
+  },
+
+  task_stop: {
+    definition: {
+      name: 'task_stop',
+      description: 'Stop/cancel a task in the runtime task registry.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Task id' },
+        },
+        required: ['id'],
+      },
+    },
+    async execute({ id }) {
+      const task = stopTaskRecord(String(id || ''));
+      if (!task) return 'Task not found.';
+      return JSON.stringify(task, null, 2);
+    },
+  },
+
+  task_output: {
+    definition: {
+      name: 'task_output',
+      description: 'Read output lines from a task.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Task id' },
+        },
+        required: ['id'],
+      },
+    },
+    async execute({ id }) {
+      const task = getTaskRecord(String(id || ''));
+      if (!task) return 'Task not found.';
+      return task.output.join('\n') || '(no task output yet)';
+    },
+  },
+
+  team_create: {
+    definition: {
+      name: 'team_create',
+      description: 'Create a team in runtime registry.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Team name' },
+          members: { type: 'string', description: 'Comma-separated list of members' },
+        },
+        required: ['name'],
+      },
+    },
+    async execute({ name, members }) {
+      const list = String(members || '')
+        .split(',')
+        .map((m) => m.trim())
+        .filter(Boolean);
+      const team = createTeamRecord({ name: String(name || 'Untitled Team'), members: list });
+      return JSON.stringify(team, null, 2);
+    },
+  },
+
+  team_list: {
+    definition: {
+      name: 'team_list',
+      description: 'List teams from runtime registry.',
+      parameters: { type: 'object', properties: {} },
+    },
+    async execute() {
+      return JSON.stringify(listTeamRecords(), null, 2);
+    },
+  },
+
+  team_delete: {
+    definition: {
+      name: 'team_delete',
+      description: 'Delete a team by id in runtime registry.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Team id' },
+        },
+        required: ['id'],
+      },
+    },
+    async execute({ id }) {
+      deleteTeamRecord(String(id || ''));
+      return 'Team deleted.';
+    },
+  },
+
+  cron_create: {
+    definition: {
+      name: 'cron_create',
+      description: 'Create a cron job record in runtime registry.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Cron name' },
+          schedule: { type: 'string', description: 'Cron expression, e.g. 0 * * * *' },
+          prompt: { type: 'string', description: 'Prompt to run' },
+          target: { type: 'string', description: 'Target surface: dashboard or telegram', enum: ['dashboard', 'telegram'] },
+        },
+        required: ['name', 'schedule', 'prompt'],
+      },
+    },
+    async execute({ name, schedule, prompt, target }) {
+      const cron = createCronRecord({
+        name: String(name || 'Untitled Cron'),
+        schedule: String(schedule || '0 * * * *'),
+        prompt: String(prompt || ''),
+        target: target === 'telegram' ? 'telegram' : 'dashboard',
+        enabled: true,
+      });
+      return JSON.stringify(cron, null, 2);
+    },
+  },
+
+  cron_list: {
+    definition: {
+      name: 'cron_list',
+      description: 'List cron jobs from runtime registry.',
+      parameters: { type: 'object', properties: {} },
+    },
+    async execute() {
+      return JSON.stringify(listCronRecords(), null, 2);
+    },
+  },
+
+  cron_delete: {
+    definition: {
+      name: 'cron_delete',
+      description: 'Delete a cron job by id in runtime registry.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Cron id' },
+        },
+        required: ['id'],
+      },
+    },
+    async execute({ id }) {
+      deleteCronRecord(String(id || ''));
+      return 'Cron deleted.';
     },
   },
 
@@ -381,7 +732,26 @@ const tools: Record<string, Tool> = {
 // ─── Get available tools (filtered by enabled skills) ─────────────────────────
 export function getAvailableTools(_enabledSkillIds?: string[]): Tool[] {
   // Always include core tools
-  const coreTools = ['read_file', 'write_file', 'list_directory', 'run_command', 'get_current_time', 'read_data_dir'];
+  const coreTools = [
+    'read_file',
+    'write_file',
+    'list_directory',
+    'run_command',
+    'get_current_time',
+    'read_data_dir',
+    'task_create',
+    'task_get',
+    'task_list',
+    'task_update',
+    'task_stop',
+    'task_output',
+    'team_create',
+    'team_list',
+    'team_delete',
+    'cron_create',
+    'cron_list',
+    'cron_delete',
+  ];
   const skillTools: Record<string, string[]> = {
     web_search: ['web_search'],
     code_exec: ['run_code'],

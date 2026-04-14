@@ -185,13 +185,7 @@ npm run build:linux
 Build output is generated into:
 
 - `dist/`
-
-## Security Notes
-
-- API keys are user-provided through Settings and stored in local app data.
-- No hardcoded provider secrets should be committed to the repository.
-- Before pushing, run a credential scan and verify `.gitignore` rules for local artifacts.
-
+  
 ## Troubleshooting
 
 1. App does not open: ensure no duplicate instance is already running and local ports `3000-3005` are not all occupied.

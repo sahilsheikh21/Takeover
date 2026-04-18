@@ -14,11 +14,11 @@ It runs on your machine through Electron, stores data locally by default, and su
 
 ## Screenshots
 
-![Takeover screenshot 1](Asset/1.png)
+<img src="Asset/1.png" alt="Takeover screenshot 1" width="760" />
 
-![Takeover screenshot 2](Asset/2.png)
+<img src="Asset/2.png" alt="Takeover screenshot 2" width="760" />
 
-![Takeover screenshot 3](Asset/3.png)
+<img src="Asset/3.png" alt="Takeover screenshot 3" width="760" />
 
 ## Main Features
 

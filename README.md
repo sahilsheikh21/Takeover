@@ -175,4 +175,4 @@ Build output is written to `dist/`.
 
 ## License
 
-Mit Licence
+Takeover is open-source under the MIT License. Feel free to fork, contribute, or open issues to help us make AI art accessible to everyone.

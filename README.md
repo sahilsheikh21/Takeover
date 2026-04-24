@@ -175,4 +175,4 @@ Build output is written to `dist/`.
 
 ## License
 
-No license file is currently declared in this repository.
+Mit Licence

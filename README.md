@@ -6,11 +6,11 @@ It runs on your machine through Electron, stores data locally by default, and su
 
 ## Why people use Takeover
 
-- Keep control of your data with local storage
-- Work from a single dashboard instead of juggling multiple AI tools
-- Connect Telegram for quick approvals and remote interaction
-- Use built-in tools for files, commands, browser tasks, and automations
-- Switch between providers based on speed, quality, or cost
+- Keep control of your data with local storage.
+- Work from a single dashboard instead of juggling multiple AI tools.
+- Connect Telegram for quick approvals and remote interaction.
+- Use built-in tools for files, commands, browser tasks, and automations.
+- Switch between providers based on speed, quality, or cost.
 
 ## Preview
 

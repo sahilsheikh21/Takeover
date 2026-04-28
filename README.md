@@ -168,6 +168,7 @@ Build output is written to `dist/`.
 2. Provider issues: re-check API key, model, and provider selection in Settings.
 3. Telegram not responding: verify token, ensure `Allowed User ID` is correct, and restart after Telegram setting changes.
 4. MCP tests fail: validate command and args in a terminal, then set `cwd` explicitly.
+5. Just Forcestop and Restart
 
 ## More Documentation
 

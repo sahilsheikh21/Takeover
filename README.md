@@ -99,7 +99,6 @@ Takeover currently supports these provider IDs:
 - `together`
 - `cohere`
 - `perplexity`
-- `lmstudio`
 - `custom`
 
 Example local Ollama defaults:

@@ -96,6 +96,7 @@ Takeover currently supports these provider IDs:
 - `mistral`
 - `deepseek`
 - `xai`
+- `Kimi`
 - `together`
 - `cohere`
 - `perplexity`

@@ -98,7 +98,6 @@ Takeover currently supports these provider IDs:
 - `xai`
 - `Kimi`
 - `together`
-- `cohere`
 - `perplexity`
 - `custom`
 

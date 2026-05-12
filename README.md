@@ -95,7 +95,6 @@ Takeover currently supports these provider IDs:
 - `openrouter`
 - `mistral`
 - `deepseek`
-- `xai`
 - `Kimi`
 - `together`
 - `perplexity`

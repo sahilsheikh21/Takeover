@@ -6,13 +6,13 @@ It runs on your machine through Electron, stores data locally by default, and su
 
 ## Why people use Takeover
 
-- Keep control of your data with local storage
-- Work from a single dashboard instead of juggling multiple AI tools
-- Connect Telegram for quick approvals and remote interaction
-- Use built-in tools for files, commands, browser tasks, and automations
-- Switch between providers based on speed, quality, or cost
+- Keep control of your data with local storage.
+- Work from a single dashboard instead of juggling multiple AI tools.
+- Connect Telegram for quick approvals and remote interaction.
+- Use built-in tools for files, commands, browser tasks, and automations.
+- Switch between providers based on speed, quality, or cost.
 
-## Screenshots
+## Preview
 
 <p>
 	<img src="Asset/1.png" alt="Takeover screenshot 1" width="32%" />
@@ -94,12 +94,8 @@ Takeover currently supports these provider IDs:
 - `openrouter`
 - `mistral`
 - `deepseek`
-- `xai`
-- `fireworks`
-- `together`
-- `cohere`
+- `Kimi`
 - `perplexity`
-- `lmstudio`
 - `custom`
 
 Example local Ollama defaults:
@@ -167,6 +163,7 @@ Build output is written to `dist/`.
 2. Provider issues: re-check API key, model, and provider selection in Settings.
 3. Telegram not responding: verify token, ensure `Allowed User ID` is correct, and restart after Telegram setting changes.
 4. MCP tests fail: validate command and args in a terminal, then set `cwd` explicitly.
+5. Just Forcestop and Restart
 
 ## More Documentation
 
@@ -174,4 +171,4 @@ Build output is written to `dist/`.
 
 ## License
 
-No license file is currently declared in this repository.
+Takeover is open-source under the MIT License. Feel free to fork, contribute, or open issues.

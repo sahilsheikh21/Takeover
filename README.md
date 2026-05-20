@@ -132,7 +132,6 @@ Root:
 - `npm run dev` start Electron in development
 - `npm run dev:web` run only the Next.js web app
 - `npm run dev:electron` run only Electron
-- `npm run build:web` build the Next.js app
 - `npm run build:win` build and package for Windows
 - `npm run build:mac` build and package for macOS
 - `npm run build:linux` build and package for Linux

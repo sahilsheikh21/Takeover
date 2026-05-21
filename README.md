@@ -27,7 +27,7 @@ It runs on your machine through Electron, stores data locally by default, and su
 - Runtime services for tasks, teams, cron jobs, and approvals
 - Telegram integration with user ID authentication, inline approvals, and message/file handling
 - MCP server setup with presets and startup tests
-- Tooling actions for filesystem operations, command execution, code execution, web search, browser extraction, and image generation
+- Tooling actions for filesystem operations, command execution, code execution, web search, browser extraction, and image generation.
 - Session persistence so your work context is not lost between runs
 
 ## Quick Start

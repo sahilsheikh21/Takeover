@@ -92,7 +92,6 @@ Takeover currently supports these provider IDs:
 - `google`
 - `groq`
 - `openrouter`
-- `mistral`
 - `deepseek`
 - `Kimi`
 - `perplexity`

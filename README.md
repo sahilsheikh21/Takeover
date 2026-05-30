@@ -36,7 +36,7 @@ It runs on your machine through Electron, stores data locally by default, and su
 
 - Node.js 18+ (latest LTS recommended)
 - npm
-- Optional for local inference: Ollama
+- Optional for local inference - Ollama
 
 ### 2. Install dependencies
 

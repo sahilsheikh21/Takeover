@@ -129,7 +129,6 @@ To override the location:
 Root:
 
 - `npm run dev` start Electron in development
-- `npm run dev:web` run only the Next.js web app
 - `npm run dev:electron` run only Electron
 - `npm run build:win` build and package for Windows
 - `npm run build:mac` build and package for macOS
